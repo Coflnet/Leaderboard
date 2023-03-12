@@ -20,17 +20,36 @@ public class ScoreboardService
         this.logger = logger;
     }
 
-    public async Task<Cassandra.ISession> GetSession(string keyspace = "scoreboards")
+    public async Task<Cassandra.ISession> GetSession()
     {
         if (_session != null)
             return _session;
-        var cluster = Cluster.Builder()
+        var builderBuilder = () => Cluster.Builder()
                             .WithCredentials(config["CASSANDRA:USER"], config["CASSANDRA:PASSWORD"])
-                            .AddContactPoints(config["CASSANDRA:HOSTS"]?.Split(",") ?? throw new System.Exception("No ASSANDRA:HOSTS defined in config"))
+                            .AddContactPoints(config["CASSANDRA:HOSTS"]?.Split(",") ?? throw new System.Exception("No ASSANDRA:HOSTS defined in config"));
+        var cluster = builderBuilder()
+                            .WithDefaultKeyspace(config["CASSANDRA:KEYSPACE"])
                             .Build();
-        if (keyspace == null)
-            return await cluster.ConnectAsync();
-        _session = await cluster.ConnectAsync(keyspace);
+        try
+        {
+
+            _session = await cluster.ConnectAsync();
+        }
+        catch (Cassandra.InvalidQueryException e)
+        {
+            logger.LogError(e, "Could not connect to cassandra");
+            if (e.Message != "Keyspace 'scoreboard' does not exist")
+                throw;
+            var replication = new Dictionary<string, string>()
+            {
+                {"class", config["CASSANDRA:REPLICATION_CLASS"]},
+                {"replication_factor", config["CASSANDRA:REPLICATION_FACTOR"]}
+            };
+            var session = await builderBuilder().Build().ConnectAsync();
+            session.CreateKeyspaceIfNotExists(config["CASSANDRA:KEYSPACE"], replication);
+            session.ChangeKeyspace(config["CASSANDRA:KEYSPACE"]);
+            _session = session;
+        }
         return _session;
     }
 
@@ -43,14 +62,14 @@ public class ScoreboardService
         var userScore = (await table.Where(f => f.Slug == boardSlug && f.UserId == userId).Take(1).ExecuteAsync()).First();
         var belowTask = table.Where(f => f.Slug == boardSlug && f.BucketId == userScore.BucketId && f.Score < userScore.Score)
                     .OrderByDescending(s => s.Score).Take(count).ExecuteAsync();
-        var aboveTask = table.Where(f => f.Slug == boardSlug && f.BucketId == userScore.BucketId && f.Score > userScore.Score)
-                    .OrderBy(s => s.Score).Take(count).ExecuteAsync();
+        var aboveTask = table.Where(f => f.Slug == boardSlug && f.BucketId == userScore.BucketId && f.Score >= userScore.Score)
+                    .OrderBy(s => s.Score).Take(count + 1).ExecuteAsync();
         var below = await belowTask;
         var above = await aboveTask;
         var scores = new List<BoardScore>();
         scores.Add(userScore);
         scores.AddRange(below);
-        scores.AddRange(above);
+        scores.AddRange(above.Where(s => s.UserId != userId));
         return scores.OrderBy(s => s.Score);
     }
 
@@ -60,12 +79,22 @@ public class ScoreboardService
         //var mapper = new Mapper(session);
         var table = new Table<BoardScore>(session);
         table.CreateIfNotExists();
-        var userScore = (await table.Where(f => f.Slug == boardSlug && f.UserId == userId).Take(1).ExecuteAsync()).FirstOrDefault();
-        if (userScore == null)
+        var userScores = (await table.Where(f => f.Slug == boardSlug && f.UserId == userId).Take(10).ExecuteAsync()).OrderByDescending(s=>s.TimeStamp).ToList();
+        if (userScores.Count == 0)
             return -1;
+        var userScore = userScores.First();
+        foreach (var item in userScores.Skip(1))
+        {
+            // delete all other scores
+            await table.Where(f => f.Slug == boardSlug && f.UserId == userId && f.BucketId == item.BucketId && f.Score == item.Score).Delete().ExecuteAsync();
+            logger.LogInformation($"Deleted score {item.Score} in bucket {item.BucketId} for user {userId}");
+        }
         var bucketTable = new Table<Bucket>(session);
 
-        var userOffset = (await table.Where(f => f.Slug == boardSlug && f.BucketId == userScore.BucketId && f.Score > userScore.Score).Select(s => s.BucketId).ExecuteAsync()).Count();
+        var scores = (await table.Where(f => f.Slug == boardSlug && f.BucketId == userScore.BucketId && f.Score >= userScore.Score)
+                    .ThenBy(k=>k.Score).Select(s => s.Score)
+                    .ExecuteAsync()).ToList();
+        var userOffset = scores.LastIndexOf(userScore.Score);
 
 
         // if offset is above 1000 the bucket needs to be adjusted
@@ -76,35 +105,55 @@ public class ScoreboardService
                     .OrderByDescending(s => s.Score).Skip(1000).ToList();
 
             // move all scores to the next bucket
-            foreach (var score in toBeMoved)
+            await Parallel.ForEachAsync(toBeMoved, async (score, token) =>
             {
-                var deleteStatement = table.Where(f => f.Slug == score.Slug && f.BucketId == score.BucketId && f.Score == score.Score && f.UserId == score.UserId).Delete();
-                
-                deleteStatement.SetConsistencyLevel(ConsistencyLevel.Quorum);
-                var res =await session.ExecuteAsync(deleteStatement);
-                score.BucketId++;
-                var statement = table.Insert(score);
-                statement.SetConsistencyLevel(ConsistencyLevel.Quorum);
-                await session.ExecuteAsync(statement);
-                if (score.Score % 10 == 0)
-                {
-                    logger.LogInformation(deleteStatement.ToString() + res.FirstOrDefault()?.ToString());
-                    logger.LogInformation($"Moving score {score.Score} from {score.UserId} to bucket {score.BucketId}");
-                }
-            }
+                var nextBucket = score.BucketId + 1;
+                await MoveScore(score, session, table, nextBucket);
+            });
             // adjust bucket min score
             await bucketTable.Insert(new Bucket()
             {
                 Slug = boardSlug,
-                BucketId = userScore.BucketId + 1,
+                BucketId = userScore.BucketId,
                 MinimumScore = toBeMoved.First().Score + 1
             }).ExecuteAsync();
             var buckets = (await bucketTask).ToList();
         }
-        logger.LogInformation($"User {userId} has offset {userOffset} in bucket {userScore.BucketId}");
+        if (scores.FirstOrDefault() == userScore.Score && userScore.BucketId > 0)
+        {
+            // move down a bucket
+            var toBeMoved = (await table.Where(f => f.Slug == boardSlug && f.BucketId == userScore.BucketId && f.Score == userScore.Score && f.UserId == userScore.UserId).ExecuteAsync())
+                    .OrderByDescending(s => s.Score).First();
+            await MoveScore(toBeMoved, session, table, toBeMoved.BucketId - 1);
+        }
+        logger.LogInformation($"User {userId} has offset {userOffset} in bucket {userScore.BucketId} with score {userScore.Score}");
 
         // every bucket holds exactly 1000 scores
         return userScore.BucketId * 1000 + userOffset + 1;
+    }
+
+    private async Task MoveScore(BoardScore score, Cassandra.ISession session, Table<BoardScore> table, long nextBucket)
+    {
+        var deleteStatement = table.Where(f => f.Slug == score.Slug && f.BucketId == score.BucketId && f.Score == score.Score && f.UserId == score.UserId).Delete();
+
+        deleteStatement.SetConsistencyLevel(ConsistencyLevel.Quorum);
+        var res = await session.ExecuteAsync(deleteStatement);
+        var statement = table.Insert(new BoardScore()
+        {
+            BucketId = nextBucket,
+            Score = score.Score,
+            Slug = score.Slug,
+            UserId = score.UserId,
+            Confidence = score.Confidence,
+            TimeStamp = score.TimeStamp
+        });
+        statement.SetConsistencyLevel(ConsistencyLevel.Quorum);
+        await session.ExecuteAsync(statement);
+        if (score.Score % 25 == 0)
+        {
+            logger.LogInformation(deleteStatement.ToString() + res.FirstOrDefault()?.ToString());
+            logger.LogInformation($"Moving score {score.Score} from {score.UserId} from bucket {score.BucketId} {nextBucket}");
+        }
     }
 
     public async Task AddScore(string boardSlug, string userId, int score, byte confidence)
@@ -139,6 +188,7 @@ public class ScoreboardService
                 Score = score,
                 Confidence = confidence
             });
+            logger.LogInformation($"Inserting score {score} for user {userId} into bucket {bucket.BucketId} with min score {bucket.MinimumScore}");
 
             statement.SetConsistencyLevel(ConsistencyLevel.Quorum);
             await session.ExecuteAsync(statement);
@@ -151,16 +201,8 @@ public class ScoreboardService
             return;
         ranCreate = true;
 
-        var session = await GetSession(null);
-        session.DeleteKeyspace("scoreboards");
-
-        var replication = new Dictionary<string, string>()
-            {
-                {"class", config["CASSANDRA:REPLICATION_CLASS"]},
-                {"replication_factor", config["CASSANDRA:REPLICATION_FACTOR"]}
-            };
-        session.CreateKeyspaceIfNotExists("scoreboards", replication);
-        session.ChangeKeyspace("scoreboards");
+        var session = await GetSession();
+        //session.DeleteKeyspace("scoreboards");
 
         var table = new Table<BoardScore>(session);
         table.CreateIfNotExists();
@@ -169,7 +211,6 @@ public class ScoreboardService
         //session.Execute("DROP TABLE IF EXISTS buckets");
 
         bucketTable.CreateIfNotExists();
-
     }
 
     private async Task<Bucket?> FindBucket(string boardSlug, long score, Cassandra.ISession session)
