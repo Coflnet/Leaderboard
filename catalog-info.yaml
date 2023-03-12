@@ -1,10 +1,10 @@
 apiVersion: backstage.io/v1alpha1
-kind: Component
+kind: Api
 metadata:
-  name: skyapi
+  name: Leaderboard
   annotations:
-    github.com/project-slug: Coflnet/skyapi
+    github.com/project-slug: Coflnet/Leaderboard
 spec:
   type: other
-  lifecycle: unknown
+  lifecycle: experimental
   owner: Äkwav
