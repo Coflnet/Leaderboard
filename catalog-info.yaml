@@ -1,0 +1,10 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: skyapi
+  annotations:
+    github.com/project-slug: Coflnet/skyapi
+spec:
+  type: other
+  lifecycle: unknown
+  owner: Äkwav
