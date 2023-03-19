@@ -11,20 +11,29 @@ using OpenTelemetry.Exporter;
 
 public static class JaegerSercieExtention
 {
-    public static void SetupTracing(this IServiceCollection services, IConfiguration config, double samplingRate = 0.03, double lowerBoundInSeconds = 60)
+    public static void SetupTracing(this WebApplicationBuilder builder, double samplingRate = 0.03, double lowerBoundInSeconds = 60)
     {
-        services.AddOpenTelemetry().WithTracing(b => b
+        var jaegerHost = builder.Configuration["JAEGER_AGENT_HOST"];
+
+        builder.Services.AddOpenTelemetry().WithTracing(b =>
+        {
+            b
             .AddAspNetCoreInstrumentation()
             .AddHttpClientInstrumentation()
-            .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(config["JAEGER_SERVICE_NAME"] ?? "default"))
-            .AddJaegerExporter(j =>
+            .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(builder.Configuration["JAEGER_SERVICE_NAME"] ?? "default"))
+            .SetSampler(new RationOrTimeBasedSampler(samplingRate, lowerBoundInSeconds));
+            if (jaegerHost == null)
+            {
+                builder.Services.BuildServiceProvider().GetRequiredService<ILogger<Program>>().LogWarning("No JAEGER_AGENT_HOST set, not exporting traces");
+                return;
+            }
+            b.AddJaegerExporter(j =>
             {
                 j.Protocol = JaegerExportProtocol.UdpCompactThrift;
-                j.AgentHost = config["JAEGER_AGENT_HOST"];
-                j.BatchExportProcessorOptions = new BatchExportProcessorOptions<Activity> { MaxQueueSize = 2000, MaxExportBatchSize = 1000, ExporterTimeoutMilliseconds = 10000, ScheduledDelayMilliseconds = 1000 };
-            })
-            .SetSampler(new RationOrTimeBasedSampler(samplingRate, lowerBoundInSeconds))
-        );
+                j.AgentHost = jaegerHost;
+                j.BatchExportProcessorOptions = new () { MaxQueueSize = 2000, MaxExportBatchSize = 1000, ExporterTimeoutMilliseconds = 10000, ScheduledDelayMilliseconds = 1000 };
+            });
+        });
     }
 
 

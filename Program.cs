@@ -9,7 +9,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<ScoreboardService>();
-builder.Services.SetupTracing(builder.Configuration);
+builder.SetupTracing();
 
 var app = builder.Build();
 
