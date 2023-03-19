@@ -53,7 +53,7 @@ public class ScoreboardService
         return _session;
     }
 
-    public async Task<IEnumerable<BoardScore>> GetScoresAround(string boardSlug, string userId, int count = 1)
+    public async Task<IEnumerable<BoardScore>> GetScoresAround(string boardSlug, string userId, int before = 1, int after = 0)
     {
         var session = await GetSession();
         //var mapper = new Mapper(session);
@@ -61,9 +61,9 @@ public class ScoreboardService
         table.CreateIfNotExists();
         var userScore = (await table.Where(f => f.Slug == boardSlug && f.UserId == userId).Take(1).ExecuteAsync()).First();
         var belowTask = table.Where(f => f.Slug == boardSlug && f.BucketId == userScore.BucketId && f.Score < userScore.Score)
-                    .OrderByDescending(s => s.Score).Take(count).ExecuteAsync();
+                    .OrderByDescending(s => s.Score).Take(after).ExecuteAsync();
         var aboveTask = table.Where(f => f.Slug == boardSlug && f.BucketId == userScore.BucketId && f.Score >= userScore.Score)
-                    .OrderBy(s => s.Score).Take(count + 1).ExecuteAsync();
+                    .OrderBy(s => s.Score).Take(before + 1).ExecuteAsync();
         var below = await belowTask;
         var above = await aboveTask;
         var scores = new List<BoardScore>();
@@ -92,9 +92,10 @@ public class ScoreboardService
         var bucketTable = new Table<Bucket>(session);
 
         var scores = (await table.Where(f => f.Slug == boardSlug && f.BucketId == userScore.BucketId && f.Score >= userScore.Score)
-                    .ThenBy(k=>k.Score).Select(s => s.Score)
+                    .ThenByDescending(k=>k.Score).Select(s => s.Score)
                     .ExecuteAsync()).ToList();
         var userOffset = scores.LastIndexOf(userScore.Score);
+        Console.WriteLine($"User offset {scores.Count()} {string.Join(",",scores.Take(10))}");
 
 
         // if offset is above 1000 the bucket needs to be adjusted
@@ -156,7 +157,7 @@ public class ScoreboardService
         }
     }
 
-    public async Task AddScore(string boardSlug, string userId, int score, byte confidence)
+    public async Task AddScore(string boardSlug, string userId, long score, byte confidence)
     {
         await Create();
         var session = await GetSession();

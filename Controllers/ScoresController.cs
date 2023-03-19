@@ -25,9 +25,9 @@ public class ScoresController : ControllerBase
     /// <returns></returns>
     [Route("{scoreBoardSlug}")]
     [HttpPost]
-    public async Task AddScore(string scoreBoardSlug, string userId, int score)
+    public async Task AddScore(string scoreBoardSlug, ScoreCreate score)
     {
-        await service.AddScore(scoreBoardSlug, userId, score, 100);
+        await service.AddScore(scoreBoardSlug, score.UserId, score.Score, score.Confidence);
     }
 
     [Route("{scoreBoardSlug}/mock")]
@@ -45,11 +45,11 @@ public class ScoresController : ControllerBase
     /// <param name="scoreBoardSlug"></param>
     /// <param name="userId"></param>
     /// <returns></returns>
-    [Route("{scoreBoardSlug}")]
+    [Route("{scoreBoardSlug}/user/{userId}")]
     [HttpGet]
-    public async Task<IEnumerable<BoardScore>> GetScoreboard(string scoreBoardSlug, string userId)
+    public async Task<IEnumerable<BoardScore>> GetScoreboard(string scoreBoardSlug, string userId, int before = 10, int after = 10)
     {
-        return await service.GetScoresAround(scoreBoardSlug, userId);
+        return await service.GetScoresAround(scoreBoardSlug, userId, before, after);
     }
 
     /// <summary>
@@ -58,7 +58,7 @@ public class ScoresController : ControllerBase
     /// <param name="scoreBoardSlug"></param>
     /// <param name="userId"></param>
     /// <returns></returns>
-    [Route("{scoreBoardSlug}/getOwnRank")]
+    [Route("{scoreBoardSlug}/user/{userId}/rank")]
     [HttpGet]
     public async Task<long> GetOwnRank(string scoreBoardSlug, string userId)
     {
