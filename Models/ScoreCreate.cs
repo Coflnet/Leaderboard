@@ -1,4 +1,4 @@
-namespace Coflnet.Scoreboard.Models;
+namespace Coflnet.Leaderboard.Models;
 
 public class ScoreCreate
 {

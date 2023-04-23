@@ -1,4 +1,4 @@
-using Coflnet.Scoreboard.Services;
+using Coflnet.Leaderboard.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,7 +8,7 @@ builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.Services.AddSingleton<ScoreboardService>();
+builder.Services.AddSingleton<LeaderboardService>();
 builder.SetupTracing();
 
 var app = builder.Build();
@@ -20,7 +20,14 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-app.UseSwagger();
-app.UseSwaggerUI();
+app.UseSwagger(a =>
+{
+    a.RouteTemplate = "api/swagger/{documentName}/swagger.json";
+});
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/api/swagger/v1/swagger.json", "SkyApi v1");
+    c.RoutePrefix = "api";
+});
 
 app.Run();

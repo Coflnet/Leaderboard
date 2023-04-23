@@ -4,17 +4,17 @@ using Microsoft.Extensions.Configuration;
 using System.Collections.Generic;
 using Cassandra;
 using Cassandra.Data.Linq;
-using Coflnet.Scoreboard.Models;
+using Coflnet.Leaderboard.Models;
 
-namespace Coflnet.Scoreboard.Services;
-public class ScoreboardService
+namespace Coflnet.Leaderboard.Services;
+public class LeaderboardService
 {
     IConfiguration config;
     Cassandra.ISession _session;
     private bool ranCreate;
-    private ILogger<ScoreboardService> logger;
+    private ILogger<LeaderboardService> logger;
 
-    public ScoreboardService(IConfiguration config, ILogger<ScoreboardService> logger)
+    public LeaderboardService(IConfiguration config, ILogger<LeaderboardService> logger)
     {
         this.config = config;
         this.logger = logger;
@@ -38,7 +38,7 @@ public class ScoreboardService
         catch (Cassandra.InvalidQueryException e)
         {
             logger.LogError(e, "Could not connect to cassandra");
-            if (e.Message != "Keyspace 'scoreboard' does not exist")
+            if (e.Message != "Keyspace 'leaderboard' does not exist")
                 throw;
             var replication = new Dictionary<string, string>()
             {
@@ -203,7 +203,7 @@ public class ScoreboardService
         ranCreate = true;
 
         var session = await GetSession();
-        //session.DeleteKeyspace("scoreboards");
+        //session.DeleteKeyspace("leaderboards");
 
         var table = new Table<BoardScore>(session);
         table.CreateIfNotExists();

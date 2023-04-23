@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace Coflnet.Scoreboard.Models;
+namespace Coflnet.Leaderboard.Models;
 
 /// <summary>
 /// A bucket is a group of scores that are grouped together to optimize performance.

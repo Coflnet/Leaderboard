@@ -1,7 +1,7 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 
-namespace Coflnet.Scoreboard.Models;
+namespace Coflnet.Leaderboard.Models;
 
 public class BoardScore
 {
