@@ -58,7 +58,6 @@ public class LeaderboardService
         var session = await GetSession();
         //var mapper = new Mapper(session);
         var table = new Table<BoardScore>(session);
-        table.CreateIfNotExists();
         var userScore = (await table.Where(f => f.Slug == boardSlug && f.UserId == userId).Take(1).ExecuteAsync()).First();
         var belowTask = table.Where(f => f.Slug == boardSlug && f.BucketId == userScore.BucketId && f.Score < userScore.Score)
                     .OrderByDescending(s => s.Score).Take(after).ExecuteAsync();
@@ -73,13 +72,25 @@ public class LeaderboardService
         return scores.OrderBy(s => s.Score);
     }
 
+    public async Task<IEnumerable<BoardScore>> GetScores(string boardSlug, int offset, int amount)
+    {
+        var session = await GetSession();
+        //var mapper = new Mapper(session);
+        var table = new Table<BoardScore>(session);
+        var bucketTable = new Table<Bucket>(session);
+        var bucketId = offset / 1000;
+        var extraOffset = offset % 1000;
+        var scores = await table.Where(f => f.Slug == boardSlug && f.BucketId == bucketId)
+                    .OrderBy(s => s.Score).Take(amount + extraOffset).ExecuteAsync();
+        return scores.Skip(extraOffset);
+    }
+
     public async Task<long> GetOwnRank(string boardSlug, string userId)
     {
         var session = await GetSession();
         //var mapper = new Mapper(session);
         var table = new Table<BoardScore>(session);
-        table.CreateIfNotExists();
-        var userScores = (await table.Where(f => f.Slug == boardSlug && f.UserId == userId).Take(10).ExecuteAsync()).OrderByDescending(s=>s.TimeStamp).ToList();
+        var userScores = (await table.Where(f => f.Slug == boardSlug && f.UserId == userId).Take(10).ExecuteAsync()).OrderByDescending(s => s.TimeStamp).ToList();
         if (userScores.Count == 0)
             return -1;
         var userScore = userScores.First();
@@ -92,10 +103,10 @@ public class LeaderboardService
         var bucketTable = new Table<Bucket>(session);
 
         var scores = (await table.Where(f => f.Slug == boardSlug && f.BucketId == userScore.BucketId && f.Score >= userScore.Score)
-                    .ThenByDescending(k=>k.Score).Select(s => s.Score)
+                    .ThenByDescending(k => k.Score).Select(s => s.Score)
                     .ExecuteAsync()).ToList();
         var userOffset = scores.LastIndexOf(userScore.Score);
-        Console.WriteLine($"User offset {scores.Count()} {string.Join(",",scores.Take(10))}");
+        Console.WriteLine($"User offset {scores.Count()} {string.Join(",", scores.Take(10))}");
 
 
         // if offset is above 1000 the bucket needs to be adjusted

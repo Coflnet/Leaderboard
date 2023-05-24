@@ -64,4 +64,18 @@ public class ScoresController : ControllerBase
     {
         return await service.GetOwnRank(leaderboardSlug, userId);
     }
+
+    /// <summary>
+    /// Get the leaderboard for a specific slug
+    /// </summary>
+    /// <param name="leaderboardSlug"></param>
+    /// <param name="offset"></param>
+    /// <param name="limit"></param>
+    /// <returns></returns>
+    [Route("{leaderboardSlug}")]
+    [HttpGet]
+    public async Task<IEnumerable<BoardScore>> GetLeaderboard(string leaderboardSlug, int offset = 0, int limit = 10)
+    {
+        return await service.GetScores(leaderboardSlug, offset, limit);
+    }
 }
