@@ -38,7 +38,7 @@ public class LeaderboardService
         catch (Cassandra.InvalidQueryException e)
         {
             logger.LogError(e, "Could not connect to cassandra");
-            if (e.Message != "Keyspace 'leaderboard' does not exist")
+            if (e.Message != $"Keyspace '{config["CASSANDRA:KEYSPACE"]}' does not exist")
                 throw;
             var replication = new Dictionary<string, string>()
             {
