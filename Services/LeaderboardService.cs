@@ -78,7 +78,7 @@ public class LeaderboardService
         //var mapper = new Mapper(session);
         var table = new Table<BoardScore>(session);
         var bucketTable = new Table<Bucket>(session);
-        var bucketId = offset / 1000;
+        long bucketId = offset / 1000;
         var extraOffset = offset % 1000;
         var scores = await table.Where(f => f.Slug == boardSlug && f.BucketId == bucketId)
                     .OrderBy(s => s.Score).Take(amount + extraOffset).ExecuteAsync();
