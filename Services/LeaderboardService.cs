@@ -82,6 +82,8 @@ public class LeaderboardService
         var extraOffset = offset % 1000;
         var scores = await table.Where(f => f.Slug == boardSlug && f.BucketId == bucketId)
                     .OrderByDescending(s => s.Score).Take(amount + extraOffset).ExecuteAsync();
+        if (bucketId > 0 && scores.Count() < amount + extraOffset)
+            await RezizeBucket(boardSlug, session, table, bucketId - 1);
         return scores.Skip(extraOffset);
     }
 
@@ -100,7 +102,6 @@ public class LeaderboardService
             await table.Where(f => f.Slug == boardSlug && f.UserId == userId && f.BucketId == item.BucketId && f.Score == item.Score).Delete().ExecuteAsync();
             logger.LogInformation($"Deleted score {item.Score} in bucket {item.BucketId} for user {userId}");
         }
-        var bucketTable = new Table<Bucket>(session);
 
         var scores = (await table.Where(f => f.Slug == boardSlug && f.BucketId == userScore.BucketId && f.Score >= userScore.Score)
                     .ThenByDescending(k => k.Score).Select(s => s.Score)
@@ -112,24 +113,8 @@ public class LeaderboardService
         // if offset is above 1000 the bucket needs to be adjusted
         if (userOffset > 1000)
         {
-            var bucketTask = bucketTable.Where(f => f.Slug == boardSlug).ExecuteAsync();
-            var toBeMoved = (await table.Where(f => f.Slug == boardSlug && f.BucketId == userScore.BucketId).ExecuteAsync())
-                    .OrderByDescending(s => s.Score).Skip(1000).ToList();
-
-            // move all scores to the next bucket
-            await Parallel.ForEachAsync(toBeMoved, async (score, token) =>
-            {
-                var nextBucket = score.BucketId + 1;
-                await MoveScore(score, session, table, nextBucket);
-            });
-            // adjust bucket min score
-            await bucketTable.Insert(new Bucket()
-            {
-                Slug = boardSlug,
-                BucketId = userScore.BucketId,
-                MinimumScore = toBeMoved.First().Score + 1
-            }).ExecuteAsync();
-            var buckets = (await bucketTask).ToList();
+            var bucketId = userScore.BucketId;
+            await RezizeBucket(boardSlug, session, table, bucketId);
         }
         if (scores.FirstOrDefault() == userScore.Score && userScore.BucketId > 0)
         {
@@ -142,6 +127,29 @@ public class LeaderboardService
 
         // every bucket holds exactly 1000 scores
         return userScore.BucketId * 1000 + userOffset + 1;
+    }
+
+    private async Task RezizeBucket(string boardSlug, Cassandra.ISession session, Table<BoardScore> table, long bucketId)
+    {
+        var bucketTable = new Table<Bucket>(session);
+        var bucketTask = bucketTable.Where(f => f.Slug == boardSlug).ExecuteAsync();
+        var toBeMoved = (await table.Where(f => f.Slug == boardSlug && f.BucketId == bucketId).ExecuteAsync())
+                .OrderByDescending(s => s.Score).Skip(1000).ToList();
+
+        // move all scores to the next bucket
+        await Parallel.ForEachAsync(toBeMoved, async (score, token) =>
+        {
+            var nextBucket = score.BucketId + 1;
+            await MoveScore(score, session, table, nextBucket);
+        });
+        // adjust bucket min score
+        await bucketTable.Insert(new Bucket()
+        {
+            Slug = boardSlug,
+            BucketId = bucketId,
+            MinimumScore = toBeMoved.First().Score + 1
+        }).ExecuteAsync();
+        var buckets = (await bucketTask).ToList();
     }
 
     private async Task MoveScore(BoardScore score, Cassandra.ISession session, Table<BoardScore> table, long nextBucket)
