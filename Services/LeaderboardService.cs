@@ -81,7 +81,7 @@ public class LeaderboardService
         long bucketId = offset / 1000;
         var extraOffset = offset % 1000;
         var scores = await table.Where(f => f.Slug == boardSlug && f.BucketId == bucketId)
-                    .OrderBy(s => s.Score).Take(amount + extraOffset).ExecuteAsync();
+                    .OrderByDescending(s => s.Score).Take(amount + extraOffset).ExecuteAsync();
         return scores.Skip(extraOffset);
     }
 
