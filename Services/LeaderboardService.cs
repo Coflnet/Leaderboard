@@ -80,8 +80,9 @@ public class LeaderboardService
         var bucketTable = new Table<Bucket>(session);
         long bucketId = offset / 1000;
         var extraOffset = offset % 1000;
-        var scores = await table.Where(f => f.Slug == boardSlug && f.BucketId == bucketId)
-                    .OrderByDescending(s => s.Score).Take(amount + extraOffset).ExecuteAsync();
+        var scores = (await table.Where(f => f.Slug == boardSlug && f.BucketId == bucketId)
+                    .OrderByDescending(s => s.Score).Take(amount + extraOffset).ExecuteAsync()).ToList();
+        logger.LogInformation($"Getting scores for {boardSlug} with offset {offset} and amount {amount} and extra offset {extraOffset} and bucket {bucketId}");
         if (bucketId > 0 && scores.Count() < amount + extraOffset)
             await RezizeBucket(boardSlug, session, table, bucketId - 1);
         return scores.Skip(extraOffset);
