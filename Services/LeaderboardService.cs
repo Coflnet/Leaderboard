@@ -13,6 +13,7 @@ public class LeaderboardService
     Cassandra.ISession _session;
     private bool ranCreate;
     private ILogger<LeaderboardService> logger;
+    private SemaphoreSlim modificationLock = new SemaphoreSlim(1, 1);
 
     public LeaderboardService(IConfiguration config, ILogger<LeaderboardService> logger)
     {
@@ -85,7 +86,44 @@ public class LeaderboardService
         logger.LogInformation($"Getting scores for {boardSlug} with offset {offset} and amount {amount} and extra offset {extraOffset} and bucket {bucketId}");
         if (bucketId > 0 && scores.Count() < amount + extraOffset)
             await RezizeBucket(boardSlug, session, table, bucketId - 1);
-        return scores.Skip(extraOffset);
+        var deduplicated = scores.GroupBy(s => s.UserId).Select(g => g.OrderByDescending(s => s.TimeStamp).First()).ToList();
+        if(deduplicated.Count != scores.Count)
+        {
+            logger.LogInformation($"Deduplicated {scores.Count - deduplicated.Count} scores");
+            SheduleBoardModification(boardSlug, async () => await CleanBucket(boardSlug, bucketId));
+        }
+        return deduplicated.Skip(extraOffset);
+    }
+
+    private void SheduleBoardModification(string boardId, Func<Task> todo)
+    {
+        Task.Run(async () =>
+        {
+            await modificationLock.WaitAsync();
+            try
+            {
+                await todo();
+            }
+            finally
+            {
+                modificationLock.Release();
+            }
+        });
+    }
+
+    private async Task CleanBucket(string boardSlug, long bucketId)
+    {
+        var session = await GetSession();
+        var table = new Table<BoardScore>(session);
+        // remove dupplicate scores and keep newest 
+        var scores = (await table.Where(f => f.Slug == boardSlug && f.BucketId == bucketId)
+                    .OrderByDescending(s => s.Score).Take(2000)
+                    .ExecuteAsync()).ToList();
+        var dupplicates = scores.GroupBy(s => s.UserId).Where(g => g.Count() > 1).SelectMany(g => g.OrderByDescending(s=>s.TimeStamp).Skip(1)).ToList();
+        foreach (var item in dupplicates)
+        {
+            await table.Where(f => f.Slug == boardSlug && f.BucketId == bucketId && f.UserId == item.UserId && f.Score == item.Score).Delete().ExecuteAsync();
+        }
     }
 
     public async Task<long> GetOwnRank(string boardSlug, string userId)
@@ -196,6 +234,10 @@ public class LeaderboardService
             });
             statement.SetConsistencyLevel(ConsistencyLevel.Quorum);
             await session.ExecuteAsync(statement);
+            // delete old score
+            var deleteStatement = table.Where(f => f.Slug == boardSlug && f.UserId == userId && f.BucketId == userScore.BucketId && f.Score == userScore.Score).Delete();
+            deleteStatement.SetConsistencyLevel(ConsistencyLevel.Quorum);
+            await session.ExecuteAsync(deleteStatement);
         }
         else
         {
@@ -238,12 +280,12 @@ public class LeaderboardService
     {
         var bucketTable = new Table<Bucket>(session);
         bucketTable.CreateIfNotExists();
-        var bucket = (await bucketTable.Where(f => f.Slug == boardSlug && f.MinimumScore < score).Take(1).ExecuteAsync()).ToList().FirstOrDefault();
+        var bucket = (await bucketTable.Where(f => f.Slug == boardSlug && f.MinimumScore <= score).Take(1).ExecuteAsync()).ToList().FirstOrDefault();
         if (bucket == null)
         {
             // create new bucket
             var newBucket = new Bucket(boardSlug, 0);
-            var bucketCreate = await bucketTable.Where(b => b.Slug == boardSlug && b.MinimumScore == 0).Select(f => new Bucket() { BucketId = 0 }).Update().ExecuteAsync();
+            var bucketCreate = await bucketTable.Where(b => b.Slug == boardSlug && b.MinimumScore == long.MinValue).Select(f => new Bucket() { BucketId = 0 }).Update().ExecuteAsync();
             //bucketCreate.SetConsistencyLevel(ConsistencyLevel.Quorum);
             //await session.ExecuteAsync(bucketCreate);
             logger.LogInformation($"Created new bucket {newBucket.BucketId} for {boardSlug}");
