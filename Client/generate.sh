@@ -1,4 +1,4 @@
-VERSION=0.0.1
+VERSION=0.1.0
 
 rm -r out
 docker run --rm -v "${PWD}:/local" --network host -u $(id -u ${USER}):$(id -g ${USER})  openapitools/openapi-generator-cli generate \

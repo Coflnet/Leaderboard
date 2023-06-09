@@ -224,6 +224,11 @@ public class LeaderboardService
         logger.LogInformation($"Adding score {score} for user {userId}");
         if (userScore != null)
         {
+            if(userScore.Score == score && userScore.Confidence == confidence)
+            {
+                logger.LogDebug($"Score {score} for user {userId} already exists");
+                return;
+            }
             var statement = table.Insert(new BoardScore()
             {
                 Score = score,
