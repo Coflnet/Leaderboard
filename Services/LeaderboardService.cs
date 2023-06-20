@@ -229,20 +229,43 @@ public class LeaderboardService
                 logger.LogDebug($"Score {score} for user {userId} already exists");
                 return;
             }
-            var statement = table.Insert(new BoardScore()
+            var newScore = new BoardScore()
             {
                 Score = score,
                 Confidence = confidence,
                 UserId = userId,
                 Slug = boardSlug,
                 BucketId = userScore.BucketId,
-            });
+            };
+            var statement = table.Insert(newScore);
             statement.SetConsistencyLevel(ConsistencyLevel.Quorum);
             await session.ExecuteAsync(statement);
             // delete old score
             var deleteStatement = table.Where(f => f.Slug == boardSlug && f.UserId == userId && f.BucketId == userScore.BucketId && f.Score == userScore.Score).Delete();
             deleteStatement.SetConsistencyLevel(ConsistencyLevel.Quorum);
             await session.ExecuteAsync(deleteStatement);
+            // check if score needs to be moved to bucket above or below 
+            if(userScore.Score > score)
+            {
+                // score is now smaller
+                var topScoreInNextBucket = (await table.Where(f => f.Slug == boardSlug && f.BucketId == userScore.BucketId + 1).OrderByDescending(s => s.Score).Take(1).ExecuteAsync()).FirstOrDefault();
+                logger.LogInformation($"Top score in next bucket {topScoreInNextBucket?.Score} for user {userId} in bucket {userScore.BucketId + 1}");
+                if(topScoreInNextBucket != null && topScoreInNextBucket.Score > score)
+                {
+                    // move down
+                    await MoveScore(newScore, session, table, userScore.BucketId + 1);
+                }
+            }
+            else if(userScore.Score < score)
+            {
+                var lowestScoreInPreviousBucket = (await table.Where(f => f.Slug == boardSlug && f.BucketId == userScore.BucketId - 1).OrderBy(s => s.Score).Take(1).ExecuteAsync()).FirstOrDefault();
+                logger.LogInformation($"Lowest score in previous bucket {lowestScoreInPreviousBucket?.Score} for user {userId} in bucket {userScore.BucketId - 1}");
+                if(lowestScoreInPreviousBucket != null && lowestScoreInPreviousBucket.Score < score)
+                {
+                    // move up
+                    await MoveScore(newScore, session, table, userScore.BucketId - 1);
+                }
+            }
         }
         else
         {
