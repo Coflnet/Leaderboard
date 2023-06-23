@@ -87,7 +87,7 @@ public class LeaderboardService
         if (bucketId > 0 && scores.Count() < amount + extraOffset)
             await RezizeBucket(boardSlug, session, table, bucketId - 1);
         var deduplicated = scores.GroupBy(s => s.UserId).Select(g => g.OrderByDescending(s => s.TimeStamp).First()).ToList();
-        if(deduplicated.Count != scores.Count)
+        if (deduplicated.Count != scores.Count)
         {
             logger.LogInformation($"Deduplicated {scores.Count - deduplicated.Count} scores");
             SheduleBoardModification(boardSlug, async () => await CleanBucket(boardSlug, bucketId));
@@ -119,7 +119,7 @@ public class LeaderboardService
         var scores = (await table.Where(f => f.Slug == boardSlug && f.BucketId == bucketId)
                     .OrderByDescending(s => s.Score).Take(2000)
                     .ExecuteAsync()).ToList();
-        var dupplicates = scores.GroupBy(s => s.UserId).Where(g => g.Count() > 1).SelectMany(g => g.OrderByDescending(s=>s.TimeStamp).Skip(1)).ToList();
+        var dupplicates = scores.GroupBy(s => s.UserId).Where(g => g.Count() > 1).SelectMany(g => g.OrderByDescending(s => s.TimeStamp).Skip(1)).ToList();
         foreach (var item in dupplicates)
         {
             await table.Where(f => f.Slug == boardSlug && f.BucketId == bucketId && f.UserId == item.UserId && f.Score == item.Score).Delete().ExecuteAsync();
@@ -157,10 +157,11 @@ public class LeaderboardService
         }
         if (scores.FirstOrDefault() == userScore.Score && userScore.BucketId > 0)
         {
-            // move down a bucket
+            // move up a bucket
             var toBeMoved = (await table.Where(f => f.Slug == boardSlug && f.BucketId == userScore.BucketId && f.Score == userScore.Score && f.UserId == userScore.UserId).ExecuteAsync())
-                    .OrderByDescending(s => s.Score).First();
-            await MoveScore(toBeMoved, session, table, toBeMoved.BucketId - 1);
+                    .OrderByDescending(s => s.Score).FirstOrDefault();
+            if (toBeMoved != null)
+                await MoveScore(toBeMoved, session, table, toBeMoved.BucketId - 1);
         }
         logger.LogInformation($"User {userId} has offset {userOffset} in bucket {userScore.BucketId} with score {userScore.Score}");
 
@@ -224,7 +225,7 @@ public class LeaderboardService
         logger.LogInformation($"Adding score {score} for user {userId}");
         if (userScore != null)
         {
-            if(userScore.Score == score && userScore.Confidence == confidence)
+            if (userScore.Score == score && userScore.Confidence == confidence)
             {
                 logger.LogDebug($"Score {score} for user {userId} already exists");
                 return;
@@ -245,22 +246,22 @@ public class LeaderboardService
             deleteStatement.SetConsistencyLevel(ConsistencyLevel.Quorum);
             await session.ExecuteAsync(deleteStatement);
             // check if score needs to be moved to bucket above or below 
-            if(userScore.Score > score)
+            if (userScore.Score > score)
             {
                 // score is now smaller
                 var topScoreInNextBucket = (await table.Where(f => f.Slug == boardSlug && f.BucketId == userScore.BucketId + 1).OrderByDescending(s => s.Score).Take(1).ExecuteAsync()).FirstOrDefault();
                 logger.LogInformation($"Top score in next bucket {topScoreInNextBucket?.Score} for user {userId} in bucket {userScore.BucketId + 1}");
-                if(topScoreInNextBucket != null && topScoreInNextBucket.Score > score)
+                if (topScoreInNextBucket != null && topScoreInNextBucket.Score > score)
                 {
                     // move down
                     await MoveScore(newScore, session, table, userScore.BucketId + 1);
                 }
             }
-            else if(userScore.Score < score)
+            else if (userScore.Score < score)
             {
                 var lowestScoreInPreviousBucket = (await table.Where(f => f.Slug == boardSlug && f.BucketId == userScore.BucketId - 1).OrderBy(s => s.Score).Take(1).ExecuteAsync()).FirstOrDefault();
                 logger.LogInformation($"Lowest score in previous bucket {lowestScoreInPreviousBucket?.Score} for user {userId} in bucket {userScore.BucketId - 1}");
-                if(lowestScoreInPreviousBucket != null && lowestScoreInPreviousBucket.Score < score)
+                if (lowestScoreInPreviousBucket != null && lowestScoreInPreviousBucket.Score < score)
                 {
                     // move up
                     await MoveScore(newScore, session, table, userScore.BucketId - 1);
