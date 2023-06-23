@@ -153,7 +153,7 @@ public class LeaderboardService
         if (userOffset > 1000)
         {
             var bucketId = userScore.BucketId;
-            await RezizeBucket(boardSlug, session, table, bucketId);
+            SheduleBoardModification(boardSlug, async () => await RezizeBucket(boardSlug, session, table, bucketId));
         }
         if (scores.FirstOrDefault() == userScore.Score && userScore.BucketId > 0)
         {
