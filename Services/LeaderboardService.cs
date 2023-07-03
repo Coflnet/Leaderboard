@@ -216,18 +216,26 @@ public class LeaderboardService
         }
     }
 
-    public async Task AddScore(string boardSlug, string userId, long score, byte confidence)
+    public async Task AddScore(string boardSlug, ScoreCreate args)
     {
         await Create();
+        var userId = args.UserId;
+        var score = args.Score;
+        var confidence = args.Confidence;
         var session = await GetSession();
         var table = new Table<BoardScore>(session);
         var userScore = (await table.Where(f => f.Slug == boardSlug && f.UserId == userId).Take(1).ExecuteAsync()).FirstOrDefault();
-        logger.LogInformation($"Adding score {score} for user {userId}");
+        logger.LogInformation($"Adding score {args} for user {userId}");
         if (userScore != null)
         {
             if (userScore.Score == score && userScore.Confidence == confidence)
             {
                 logger.LogDebug($"Score {score} for user {userId} already exists");
+                return;
+            }
+            if(args.HighScore && userScore.Score > score)
+            {
+                logger.LogDebug($"Score {score} for user {userId} is lower than current score {userScore.Score} aborting");
                 return;
             }
             var newScore = new BoardScore()
@@ -280,7 +288,7 @@ public class LeaderboardService
                 Score = score,
                 Confidence = confidence
             });
-            logger.LogInformation($"Inserting score {score} for user {userId} into bucket {bucket.BucketId} with min score {bucket.MinimumScore}");
+            logger.LogInformation($"Inserting score {args} for user {userId} into bucket {bucket.BucketId} with min score {bucket.MinimumScore}");
 
             statement.SetConsistencyLevel(ConsistencyLevel.Quorum);
             await session.ExecuteAsync(statement);

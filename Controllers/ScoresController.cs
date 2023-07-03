@@ -27,7 +27,7 @@ public class ScoresController : ControllerBase
     [HttpPost]
     public async Task AddScore(string leaderboardSlug, ScoreCreate score)
     {
-        await service.AddScore(leaderboardSlug, score.UserId, score.Score, score.Confidence);
+        await service.AddScore(leaderboardSlug, score);
     }
 
     [Route("{leaderboardSlug}/mock")]
@@ -36,7 +36,12 @@ public class ScoresController : ControllerBase
     {
         for (int i = start; i < start + 2000; i++)
         {
-            await service.AddScore(leaderboardSlug, i.ToString(), i, 1);
+            await service.AddScore(leaderboardSlug, new ScoreCreate()
+            {
+                UserId = i.ToString(),
+                Score = i,
+                Confidence = 100
+            });
         }
     }
     /// <summary>
