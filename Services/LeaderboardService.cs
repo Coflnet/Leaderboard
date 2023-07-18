@@ -323,12 +323,9 @@ public class LeaderboardService
             // create new bucket
             var newBucket = new Bucket(boardSlug, 0);
             var bucketCreate = await bucketTable.Where(b => b.Slug == boardSlug && b.MinimumScore == long.MinValue).Select(f => new Bucket() { BucketId = 0 }).Update().ExecuteAsync();
-            //bucketCreate.SetConsistencyLevel(ConsistencyLevel.Quorum);
-            //await session.ExecuteAsync(bucketCreate);
             logger.LogInformation($"Created new bucket {newBucket.BucketId} for {boardSlug}");
             return (await bucketTable.Where(f => f.Slug == boardSlug && f.MinimumScore <= score).Take(1).ExecuteAsync()).ToList().FirstOrDefault();
         }
         return bucket;
     }
 }
-
