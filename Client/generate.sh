@@ -1,9 +1,9 @@
-VERSION=0.2.0
+VERSION=0.2.1
 
 rm -r out
 docker run --rm -v "${PWD}:/local" --network host -u $(id -u ${USER}):$(id -g ${USER})  openapitools/openapi-generator-cli generate \
 -i http://localhost:5042/api/swagger/v1/swagger.json \
--g csharp-netcore \
+-g csharp \
 -o /local/out --additional-properties=packageName=Coflnet.Leaderboard.Client,packageVersion=$VERSION,licenseId=MIT
 
 cd out
