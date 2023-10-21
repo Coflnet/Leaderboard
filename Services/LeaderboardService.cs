@@ -288,7 +288,7 @@ public class LeaderboardService
                 Score = score,
                 Confidence = confidence
             });
-            logger.LogInformation($"Inserting score {args} for user {userId} into bucket {bucket.BucketId} with min score {bucket.MinimumScore}");
+            logger.LogInformation($"Inserting score {args.Score} for user {userId} into bucket {bucket.BucketId} with min score {bucket.MinimumScore}");
 
             statement.SetConsistencyLevel(ConsistencyLevel.Quorum);
             await session.ExecuteAsync(statement);
