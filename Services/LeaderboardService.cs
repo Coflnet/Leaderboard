@@ -225,7 +225,7 @@ public class LeaderboardService
         var session = await GetSession();
         var table = new Table<BoardScore>(session);
         var userScore = (await table.Where(f => f.Slug == boardSlug && f.UserId == userId).Take(1).ExecuteAsync()).FirstOrDefault();
-        logger.LogInformation($"Adding score {args} for user {userId}");
+        logger.LogInformation($"Adding score {args.HighScore} for user {userId}");
         if (userScore != null)
         {
             if (userScore.Score == score && userScore.Confidence == confidence)
