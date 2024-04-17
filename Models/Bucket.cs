@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Cassandra.Mapping.Attributes;
 
 namespace Coflnet.Leaderboard.Models;
 
@@ -10,7 +11,7 @@ public class Bucket
     /// <summary>
     /// The bucket id
     /// </summary>
-    [Cassandra.Mapping.Attributes.PartitionKey]
+    [PartitionKey]
     [MaxLength(32)]
     public string Slug { get; set; }
     /// <summary>
@@ -18,14 +19,9 @@ public class Bucket
     /// </summary>
     public long BucketId { get; set; }
     /// <summary>
-    /// How many scores are in this bucket
-    /// </summary>
-    //[Cassandra.Mapping.Attributes.Counter]
-    //public short ScoreCount { get; set; }
-    /// <summary>
     /// The minimum score of this bucket
     /// </summary>
-    [Cassandra.Mapping.Attributes.ClusteringKey(0)]
+    [ClusteringKey(0)]
     public long MinimumScore { get; set; }
     /// <summary>
     /// The offset of the first score in this bucket.

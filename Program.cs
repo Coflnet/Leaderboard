@@ -1,3 +1,4 @@
+using Coflnet.Core;
 using Coflnet.Leaderboard.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -8,13 +9,14 @@ builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddCoflnetCore();
 builder.Services.AddSingleton<LeaderboardService>();
 builder.SetupTracing();
 
 var app = builder.Build();
 
 
-app.UseHttpsRedirection();
+app.UseCoflnetCore();
 
 app.UseAuthorization();
 

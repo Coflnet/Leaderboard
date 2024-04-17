@@ -1,4 +1,5 @@
 using System;
+using Cassandra.Mapping.Attributes;
 
 namespace Coflnet.Sky.Search.Models;
 
@@ -16,12 +17,12 @@ public class SearchTrackElem
     /// <summary>
     /// The session Id of the user (used to find earlier inputs)
     /// </summary>
-    [Cassandra.Mapping.Attributes.PartitionKey]
+    [PartitionKey]
     public string SessionUuid { get; set; }
     /// <summary>
     /// When the search occured
     /// </summary>
-    [Cassandra.Mapping.Attributes.ClusteringKey(0)]
+    [ClusteringKey(0)]
     public DateTime TimeStamp { get; set; } = DateTime.Now;
 }
 
@@ -30,7 +31,7 @@ public class SearchWeight
     /// <summary>
     /// The input from the user
     /// </summary>
-    [Cassandra.Mapping.Attributes.PartitionKey]
+    [PartitionKey]
     public string Input { get; set; }
     /// <summary>
     /// The url this weight applies to
@@ -39,7 +40,7 @@ public class SearchWeight
     /// <summary>
     /// The weight of the input
     /// </summary>
-    [Cassandra.Mapping.Attributes.ClusteringKey]
+    [ClusteringKey]
     public int Weight { get; set; }
 
     /// <summary>
@@ -53,7 +54,7 @@ public class SearchSuggestion
     /// <summary>
     /// The input from the user
     /// </summary>
-    [Cassandra.Mapping.Attributes.PartitionKey]
+    [PartitionKey]
     public string Input { get; set; }
     /// <summary>
     /// The result data
@@ -66,6 +67,6 @@ public class SearchSuggestion
     /// <summary>
     /// When the search occured
     /// </summary>
-    [Cassandra.Mapping.Attributes.ClusteringKey(0)]
+    [ClusteringKey(0)]
     public DateTime UpdatedAt { get; set; } = DateTime.Now;
 }

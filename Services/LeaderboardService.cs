@@ -5,58 +5,27 @@ using System.Collections.Generic;
 using Cassandra;
 using Cassandra.Data.Linq;
 using Coflnet.Leaderboard.Models;
+using ISession = Cassandra.ISession;
 
 namespace Coflnet.Leaderboard.Services;
 public class LeaderboardService
 {
     IConfiguration config;
-    Cassandra.ISession _session;
+    ISession _session;
     private bool ranCreate;
     private ILogger<LeaderboardService> logger;
     private SemaphoreSlim modificationLock = new SemaphoreSlim(1, 1);
+    private ISession session;
 
-    public LeaderboardService(IConfiguration config, ILogger<LeaderboardService> logger)
+    public LeaderboardService(IConfiguration config, ILogger<LeaderboardService> logger, ISession session)
     {
         this.config = config;
         this.logger = logger;
-    }
-
-    public async Task<Cassandra.ISession> GetSession()
-    {
-        if (_session != null)
-            return _session;
-        var builderBuilder = () => Cluster.Builder()
-                            .WithCredentials(config["CASSANDRA:USER"], config["CASSANDRA:PASSWORD"])
-                            .AddContactPoints(config["CASSANDRA:HOSTS"]?.Split(",") ?? throw new System.Exception("No ASSANDRA:HOSTS defined in config"));
-        var cluster = builderBuilder()
-                            .WithDefaultKeyspace(config["CASSANDRA:KEYSPACE"])
-                            .Build();
-        try
-        {
-
-            _session = await cluster.ConnectAsync();
-        }
-        catch (Cassandra.InvalidQueryException e)
-        {
-            logger.LogError(e, "Could not connect to cassandra");
-            if (e.Message != $"Keyspace '{config["CASSANDRA:KEYSPACE"]}' does not exist")
-                throw;
-            var replication = new Dictionary<string, string>()
-            {
-                {"class", config["CASSANDRA:REPLICATION_CLASS"]},
-                {"replication_factor", config["CASSANDRA:REPLICATION_FACTOR"]}
-            };
-            var session = await builderBuilder().Build().ConnectAsync();
-            session.CreateKeyspaceIfNotExists(config["CASSANDRA:KEYSPACE"], replication);
-            session.ChangeKeyspace(config["CASSANDRA:KEYSPACE"]);
-            _session = session;
-        }
-        return _session;
+        this.session = session;
     }
 
     public async Task<IEnumerable<BoardScore>> GetScoresAround(string boardSlug, string userId, int before = 1, int after = 0)
     {
-        var session = await GetSession();
         //var mapper = new Mapper(session);
         var table = new Table<BoardScore>(session);
         var userScore = (await table.Where(f => f.Slug == boardSlug && f.UserId == userId).Take(1).ExecuteAsync()).First();
@@ -75,7 +44,6 @@ public class LeaderboardService
 
     public async Task<IEnumerable<BoardScore>> GetScores(string boardSlug, int offset, int amount)
     {
-        var session = await GetSession();
         //var mapper = new Mapper(session);
         var table = new Table<BoardScore>(session);
         var bucketTable = new Table<Bucket>(session);
@@ -113,7 +81,6 @@ public class LeaderboardService
 
     private async Task CleanBucket(string boardSlug, long bucketId)
     {
-        var session = await GetSession();
         var table = new Table<BoardScore>(session);
         // remove dupplicate scores and keep newest 
         var scores = (await table.Where(f => f.Slug == boardSlug && f.BucketId == bucketId)
@@ -128,7 +95,6 @@ public class LeaderboardService
 
     public async Task<long> GetOwnRank(string boardSlug, string userId)
     {
-        var session = await GetSession();
         //var mapper = new Mapper(session);
         var table = new Table<BoardScore>(session);
         var userScores = (await table.Where(f => f.Slug == boardSlug && f.UserId == userId).Take(10).ExecuteAsync()).OrderByDescending(s => s.TimeStamp).ToList();
@@ -169,7 +135,7 @@ public class LeaderboardService
         return userScore.BucketId * 1000 + userOffset + 1;
     }
 
-    private async Task RezizeBucket(string boardSlug, Cassandra.ISession session, Table<BoardScore> table, long bucketId)
+    private async Task RezizeBucket(string boardSlug, ISession session, Table<BoardScore> table, long bucketId)
     {
         var bucketTable = new Table<Bucket>(session);
         var bucketTask = bucketTable.Where(f => f.Slug == boardSlug).ExecuteAsync();
@@ -192,7 +158,7 @@ public class LeaderboardService
         var buckets = (await bucketTask).ToList();
     }
 
-    private async Task MoveScore(BoardScore score, Cassandra.ISession session, Table<BoardScore> table, long nextBucket)
+    private async Task MoveScore(BoardScore score, ISession session, Table<BoardScore> table, long nextBucket)
     {
         var deleteStatement = table.Where(f => f.Slug == score.Slug && f.BucketId == score.BucketId && f.Score == score.Score && f.UserId == score.UserId).Delete();
 
@@ -222,7 +188,6 @@ public class LeaderboardService
         var userId = args.UserId;
         var score = args.Score;
         var confidence = args.Confidence;
-        var session = await GetSession();
         var table = new Table<BoardScore>(session);
         var userScore = (await table.Where(f => f.Slug == boardSlug && f.UserId == userId).Take(1).ExecuteAsync()).FirstOrDefault();
         logger.LogInformation($"Adding score {args.HighScore} for user {userId}");
@@ -301,7 +266,6 @@ public class LeaderboardService
             return;
         ranCreate = true;
 
-        var session = await GetSession();
         //session.DeleteKeyspace("leaderboards");
 
         var table = new Table<BoardScore>(session);
@@ -313,7 +277,7 @@ public class LeaderboardService
         bucketTable.CreateIfNotExists();
     }
 
-    private async Task<Bucket?> FindBucket(string boardSlug, long score, Cassandra.ISession session)
+    private async Task<Bucket?> FindBucket(string boardSlug, long score, ISession session)
     {
         var bucketTable = new Table<Bucket>(session);
         bucketTable.CreateIfNotExists();
