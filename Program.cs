@@ -11,7 +11,6 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddCoflnetCore();
 builder.Services.AddSingleton<LeaderboardService>();
-builder.SetupTracing();
 
 var app = builder.Build();
 
