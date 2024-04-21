@@ -41,15 +41,37 @@ public class MigrationService : BackgroundService
         statement = new SimpleStatement("SELECT * FROM boardscore");
         statement.SetPageSize(1000);
         var scores = await oldSession.ExecuteAsync(statement);
-        await Parallel.ForEachAsync(scores,
-            new ParallelOptions { MaxDegreeOfParallelism = 30 },
-        async (score, c) =>
+        foreach (var batch in Batch(scores, 200))
         {
-            await newSession.ExecuteAsync(new SimpleStatement("INSERT INTO boardscore (slug, bucketid, score, userid, confidence, timestamp) VALUES (?, ?, ?, ?, ?, ?)", 
-                score.GetValue<string>("slug"), score.GetValue<long>("bucketid"), score.GetValue<long>("score"), score.GetValue<string>("userid"), score.GetValue<short>("confidence"), score.GetValue<DateTime>("timestamp")));
-            migrated.Inc();
-        });
+
+            await Parallel.ForEachAsync(batch,
+                new ParallelOptions { MaxDegreeOfParallelism = 30 },
+            async (score, c) =>
+            {
+                await newSession.ExecuteAsync(new SimpleStatement("INSERT INTO boardscore (slug, bucketid, score, userid, confidence, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
+                    score.GetValue<string>("slug"), score.GetValue<long>("bucketid"), score.GetValue<long>("score"), score.GetValue<string>("userid"), score.GetValue<short>("confidence"), score.GetValue<DateTime>("timestamp")));
+                migrated.Inc();
+            });
+        }
         logger.LogInformation("Migrated scores");
         // cql for selecting columns on table: SELECT column_name FROM system_schema.columns WHERE keyspace_name = 'leaderboard' AND table_name = 'bucket';
+    }
+
+    private IEnumerable<IEnumerable<Row>> Batch(this IEnumerable<Row> source, int size)
+    {
+        List<Row> batch = new List<Row>(size);
+        foreach (var item in source)
+        {
+            batch.Add(item);
+            if (batch.Count == size)
+            {
+                yield return batch;
+                batch = new List<Row>(size);
+            }
+        }
+        if (batch.Count > 0)
+        {
+            yield return batch;
+        }
     }
 }
