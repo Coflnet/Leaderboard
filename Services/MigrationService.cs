@@ -52,12 +52,13 @@ public class MigrationService : BackgroundService
                     score.GetValue<string>("slug"), score.GetValue<long>("bucketid"), score.GetValue<long>("score"), score.GetValue<string>("userid"), score.GetValue<short>("confidence"), score.GetValue<DateTime>("timestamp")));
                 migrated.Inc();
             });
+            Console.Write("\rMigrated batch {0} ", migrated.Value);
         }
         logger.LogInformation("Migrated scores");
         // cql for selecting columns on table: SELECT column_name FROM system_schema.columns WHERE keyspace_name = 'leaderboard' AND table_name = 'bucket';
     }
 
-    private IEnumerable<IEnumerable<Row>> Batch(this IEnumerable<Row> source, int size)
+    private IEnumerable<IEnumerable<Row>> Batch(IEnumerable<Row> source, int size)
     {
         List<Row> batch = new List<Row>(size);
         foreach (var item in source)
