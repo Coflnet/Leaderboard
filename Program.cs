@@ -11,6 +11,11 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddCoflnetCore();
 builder.Services.AddSingleton<LeaderboardService>();
+if(builder.Configuration["OLD_CASSANDRA:HOSTS"] != null)
+{
+    Console.WriteLine("Migrating from old cassandra");
+    builder.Services.AddHostedService<MigrationService>();
+}
 
 var app = builder.Build();
 
