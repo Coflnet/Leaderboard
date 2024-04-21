@@ -42,14 +42,13 @@ public class MigrationService : BackgroundService
         }
         var table = new Table<BoardScore>(oldSession);
         var newTable = new Table<BoardScore>(newSession);
-        var statement = new SimpleStatement("SELECT * FROM boardscore");
         Console.WriteLine("Starting migration from offset {0}", offset);
 
         var query = table;
         query.SetAutoPage(false);
         query.SetPageSize(1000);
         var pagingSateRedis = db.StringGet("leaderboard_migration_paging_state");
-        byte[] ?pagingState = null;
+        byte[]? pagingState;
         if (!pagingSateRedis.IsNullOrEmpty)
         {
             pagingState = Convert.FromBase64String(pagingSateRedis);
@@ -64,7 +63,8 @@ public class MigrationService : BackgroundService
             {
                 batchStatement.Add(newTable.Insert(score));
             }
-            await newSession.ExecuteAsync(batchStatement);
+            // don't insert just benchmark
+            //await newSession.ExecuteAsync(batchStatement);
             migrated.Inc(scores.Count());
             offset += scores.Count();
             db.StringSet("leaderboard_migration_offset", offset);
