@@ -4,6 +4,8 @@ using Cassandra;
 using Prometheus;
 using StackExchange.Redis;
 using System.Text;
+using Cassandra.Data.Linq;
+using Coflnet.Leaderboard.Models;
 
 namespace Coflnet.Leaderboard.Services;
 
@@ -48,18 +50,18 @@ public class MigrationService : BackgroundService
         {
             offset = int.Parse(fromRedis);
         }
-
+        var table = new Table<BoardScore>(oldSession);
+        var newTable = new Table<BoardScore>(newSession);
         statement = new SimpleStatement("SELECT * FROM boardscore");
         Console.WriteLine("Starting migration from offset {0}", offset);
 
-        var scores = await oldSession.ExecuteAsync(statement);
+        var scores = await table.ExecuteAsync();
         foreach (var batch in Batch(scores.Skip(offset), 200))
         {
             var batchStatement = new BatchStatement();
             foreach (var score in batch)
             {
-                batchStatement.Add(new SimpleStatement("INSERT INTO boardscore (slug, bucketid, score, userid, confidence, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
-                    score.GetValue<string>("slug"), score.GetValue<long>("bucketid"), score.GetValue<long>("score"), score.GetValue<string>("userid"), score.GetValue<short>("confidence"), score.GetValue<DateTime>("timestamp")));
+                batchStatement.Add(newTable.Insert(score));
             }
             await newSession.ExecuteAsync(batchStatement);
             migrated.Inc(batch.Count());
@@ -78,16 +80,16 @@ public class MigrationService : BackgroundService
             score.GetValue<string>("slug"), score.GetValue<long>("bucketid"), score.GetValue<long>("score"), score.GetValue<string>("userid"), score.GetValue<short>("confidence"), score.GetValue<DateTime>("timestamp")));
     }
 
-    private IEnumerable<IEnumerable<Row>> Batch(IEnumerable<Row> source, int size)
+    private IEnumerable<IEnumerable<T>> Batch<T>(IEnumerable<T> source, int size)
     {
-        List<Row> batch = new List<Row>(size);
+        List<T> batch = new List<T>(size);
         foreach (var item in source)
         {
             batch.Add(item);
             if (batch.Count == size)
             {
                 yield return batch;
-                batch = new List<Row>(size);
+                batch = new List<T>(size);
             }
         }
         if (batch.Count > 0)
