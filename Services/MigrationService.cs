@@ -41,7 +41,6 @@ public class MigrationService : BackgroundService
             offset = int.Parse(fromRedis);
         }
         var table = new Table<BoardScore>(oldSession);
-        var newTable = new Table<BoardScore>(newSession);
         Console.WriteLine("Starting migration from offset {0}", offset);
 
         var query = table;
@@ -54,17 +53,20 @@ public class MigrationService : BackgroundService
             pagingState = Convert.FromBase64String(pagingSateRedis);
             query.SetPagingState(pagingState);
         }
+        Task? insertTask = null;
         var scores = await query.ExecutePagedAsync();
         do
         {
-
+            if (insertTask != null)
+                await insertTask;
+            var newTable = new Table<BoardScore>(newSession);
             var batchStatement = new BatchStatement();
             foreach (var score in scores)
             {
                 batchStatement.Add(newTable.Insert(score));
             }
             // don't insert just benchmark
-            //await newSession.ExecuteAsync(batchStatement);
+            insertTask = newSession.ExecuteAsync(batchStatement);
             migrated.Inc(scores.Count);
             offset += scores.Count;
             db.StringSet("leaderboard_migration_offset", offset);
