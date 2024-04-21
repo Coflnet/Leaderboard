@@ -1,6 +1,7 @@
 using ISession = Cassandra.ISession;
 using Coflnet.Cassandra;
 using Cassandra;
+using Prometheus;
 
 namespace Coflnet.Leaderboard.Services;
 
@@ -10,6 +11,7 @@ public class MigrationService : BackgroundService
     private ILogger<MigrationService> logger;
     private ISession oldSession;
     private ISession newSession;
+    Counter migrated = Metrics.CreateCounter("leaderboard_migration_migrated", "The number of items migrated");
 
     public MigrationService(LeaderboardService leaderboardService, OldSession oldSession, ISession session, ILogger<MigrationService> logger)
     {
@@ -39,10 +41,14 @@ public class MigrationService : BackgroundService
         statement = new SimpleStatement("SELECT * FROM boardscore");
         statement.SetPageSize(1000);
         var scores = await oldSession.ExecuteAsync(statement);
-        foreach (var score in scores)
+        await Parallel.ForEachAsync(scores,
+            new ParallelOptions { MaxDegreeOfParallelism = 30 },
+        async (score, c) =>
         {
-            await newSession.ExecuteAsync(new SimpleStatement("INSERT INTO boardscore (slug, bucketid, score, userid, confidence, timestamp) VALUES (?, ?, ?, ?, ?, ?)", score.GetValue<string>("slug"), score.GetValue<long>("bucketid"), score.GetValue<long>("score"), score.GetValue<string>("userid"), score.GetValue<short>("confidence"), score.GetValue<DateTime>("timestamp")));
-        }
+            await newSession.ExecuteAsync(new SimpleStatement("INSERT INTO boardscore (slug, bucketid, score, userid, confidence, timestamp) VALUES (?, ?, ?, ?, ?, ?)", 
+                score.GetValue<string>("slug"), score.GetValue<long>("bucketid"), score.GetValue<long>("score"), score.GetValue<string>("userid"), score.GetValue<short>("confidence"), score.GetValue<DateTime>("timestamp")));
+            migrated.Inc();
+        });
         logger.LogInformation("Migrated scores");
         // cql for selecting columns on table: SELECT column_name FROM system_schema.columns WHERE keyspace_name = 'leaderboard' AND table_name = 'bucket';
     }
