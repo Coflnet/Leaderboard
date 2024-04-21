@@ -65,8 +65,8 @@ public class MigrationService : BackgroundService
             }
             // don't insert just benchmark
             //await newSession.ExecuteAsync(batchStatement);
-            migrated.Inc(scores.Count());
-            offset += scores.Count();
+            migrated.Inc(scores.Count);
+            offset += scores.Count;
             db.StringSet("leaderboard_migration_offset", offset);
             var queryState = scores.PagingState;
             if (queryState != null)
@@ -74,20 +74,21 @@ public class MigrationService : BackgroundService
                 db.StringSet("leaderboard_migration_paging_state", Convert.ToBase64String(queryState));
             }
             pagingState = queryState;
-            // free up memory
+            // dispose the page
             Console.WriteLine("Migrated batch {0}", offset);
-            await Task.Delay(100);
-
-        } while ((scores = await GetNextPage(query,pagingState)) != null);
+        } while ((scores = await GetNextPage(pagingState)) != null);
         logger.LogInformation("Migrated scores");
         // cql for selecting columns on table: SELECT column_name FROM system_schema.columns WHERE keyspace_name = 'leaderboard' AND table_name = 'bucket';
     }
 
-    private static async Task<IPage<BoardScore>> GetNextPage(Table<BoardScore> query, byte[]? pagingState)
+    private async Task<IPage<BoardScore>> GetNextPage(byte[]? pagingState)
     {
+        var table = new Table<BoardScore>(oldSession);
+        table.SetAutoPage(false);
+        table.SetPageSize(1000);
         if (pagingState == null)
             return null;
-        query.SetPagingState(pagingState);
-        return await query.ExecutePagedAsync();
+        table.SetPagingState(pagingState);
+        return await table.ExecutePagedAsync();
     }
 }
