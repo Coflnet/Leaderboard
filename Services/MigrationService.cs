@@ -40,6 +40,7 @@ public class MigrationService : BackgroundService
 
         statement = new SimpleStatement("SELECT * FROM boardscore");
         statement.SetPageSize(1000);
+        
         var scores = await oldSession.ExecuteAsync(statement);
         foreach (var batch in Batch(scores, 200))
         {
@@ -48,14 +49,20 @@ public class MigrationService : BackgroundService
                 new ParallelOptions { MaxDegreeOfParallelism = 30 },
             async (score, c) =>
             {
-                await newSession.ExecuteAsync(new SimpleStatement("INSERT INTO boardscore (slug, bucketid, score, userid, confidence, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
-                    score.GetValue<string>("slug"), score.GetValue<long>("bucketid"), score.GetValue<long>("score"), score.GetValue<string>("userid"), score.GetValue<short>("confidence"), score.GetValue<DateTime>("timestamp")));
+                //await InsertScore(score);
                 migrated.Inc();
             });
+            // free up memory
             Console.Write("\rMigrated batch {0} ", migrated.Value);
         }
         logger.LogInformation("Migrated scores");
         // cql for selecting columns on table: SELECT column_name FROM system_schema.columns WHERE keyspace_name = 'leaderboard' AND table_name = 'bucket';
+    }
+
+    private async Task InsertScore(Row score)
+    {
+        await newSession.ExecuteAsync(new SimpleStatement("INSERT INTO boardscore (slug, bucketid, score, userid, confidence, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
+            score.GetValue<string>("slug"), score.GetValue<long>("bucketid"), score.GetValue<long>("score"), score.GetValue<string>("userid"), score.GetValue<short>("confidence"), score.GetValue<DateTime>("timestamp")));
     }
 
     private IEnumerable<IEnumerable<Row>> Batch(IEnumerable<Row> source, int size)
