@@ -1,5 +1,6 @@
 using Coflnet.Core;
 using Coflnet.Leaderboard.Services;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,6 +12,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddCoflnetCore();
 builder.Services.AddSingleton<LeaderboardService>();
+builder.Services.AddSingleton<ConnectionMultiplexer>(ConnectionMultiplexer.Connect(builder.Configuration["REDIS_HOST"]));
 if(builder.Configuration["OLD_CASSANDRA:HOSTS"] != null)
 {
     Console.WriteLine("Migrating from old cassandra");
