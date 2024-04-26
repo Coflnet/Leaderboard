@@ -198,7 +198,7 @@ public class LeaderboardService
                 logger.LogDebug($"Score {score} for user {userId} already exists");
                 return;
             }
-            if(args.HighScore && userScore.Score > score)
+            if (args.HighScore && userScore.Score > score)
             {
                 logger.LogDebug($"Score {score} for user {userId} is lower than current score {userScore.Score} aborting");
                 return;
@@ -212,6 +212,10 @@ public class LeaderboardService
                 BucketId = userScore.BucketId,
             };
             var statement = table.Insert(newScore);
+            if (args.DaysToKeep != 0)
+            {
+                statement.SetTTL(args.DaysToKeep * 24 * 60 * 60);
+            }
             statement.SetConsistencyLevel(ConsistencyLevel.Quorum);
             await session.ExecuteAsync(statement);
             // delete old score
