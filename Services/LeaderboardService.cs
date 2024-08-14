@@ -28,7 +28,9 @@ public class LeaderboardService
     {
         //var mapper = new Mapper(session);
         var table = new Table<BoardScore>(session);
-        var userScore = (await table.Where(f => f.Slug == boardSlug && f.UserId == userId).Take(1).ExecuteAsync()).First();
+        var userScore = (await table.Where(f => f.Slug == boardSlug && f.UserId == userId).Take(1).ExecuteAsync()).FirstOrDefault();
+        if(userScore == default)
+            return new List<BoardScore>();
         var belowTask = table.Where(f => f.Slug == boardSlug && f.BucketId == userScore.BucketId && f.Score < userScore.Score)
                     .OrderByDescending(s => s.Score).Take(after).ExecuteAsync();
         var aboveTask = table.Where(f => f.Slug == boardSlug && f.BucketId == userScore.BucketId && f.Score >= userScore.Score)
