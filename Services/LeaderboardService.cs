@@ -8,6 +8,7 @@ using Coflnet.Leaderboard.Models;
 using ISession = Cassandra.ISession;
 
 namespace Coflnet.Leaderboard.Services;
+
 public class LeaderboardService
 {
     IConfiguration config;
@@ -29,7 +30,7 @@ public class LeaderboardService
         //var mapper = new Mapper(session);
         var table = new Table<BoardScore>(session);
         var userScore = (await table.Where(f => f.Slug == boardSlug && f.UserId == userId).Take(1).ExecuteAsync()).FirstOrDefault();
-        if(userScore == default)
+        if (userScore == default)
             return new List<BoardScore>();
         var belowTask = table.Where(f => f.Slug == boardSlug && f.BucketId == userScore.BucketId && f.Score < userScore.Score)
                     .OrderByDescending(s => s.Score).Take(after).ExecuteAsync();
@@ -52,7 +53,7 @@ public class LeaderboardService
         long bucketId = offset / 1000;
         var extraOffset = offset % 1000;
         var scores = (await table.Where(f => f.Slug == boardSlug && f.BucketId == bucketId)
-                    .OrderByDescending(s => s.Score).Take(amount + extraOffset).ExecuteAsync()).ToList();
+                    .OrderByDescending(s => s.Score).Take(amount + extraOffset + 10).ExecuteAsync()).ToList();
         logger.LogInformation($"Getting scores for {boardSlug} with offset {offset} and amount {amount} and extra offset {extraOffset} and bucket {bucketId}");
         if (bucketId > 0 && scores.Count() < amount + extraOffset)
             await RezizeBucket(boardSlug, session, table, bucketId - 1);
@@ -62,7 +63,7 @@ public class LeaderboardService
             logger.LogInformation($"Deduplicated {scores.Count - deduplicated.Count} scores");
             SheduleBoardModification(boardSlug, async () => await CleanBucket(boardSlug, bucketId));
         }
-        return deduplicated.Skip(extraOffset);
+        return deduplicated.Skip(extraOffset).Take(amount);
     }
 
     private void SheduleBoardModification(string boardId, Func<Task> todo)
@@ -212,6 +213,7 @@ public class LeaderboardService
                 UserId = userId,
                 Slug = boardSlug,
                 BucketId = userScore.BucketId,
+                TimeStamp = DateTime.UtcNow
             };
             var statement = table.Insert(newScore);
             if (args.DaysToKeep != 0)
