@@ -112,8 +112,8 @@ public class LeaderboardService
         }
 
         var scores = (await table.Where(f => f.Slug == boardSlug && f.BucketId == userScore.BucketId && f.Score >= userScore.Score)
-                    .ThenByDescending(k => k.Score).Select(s => s.Score)
-                    .ExecuteAsync()).ToList();
+                    .ThenByDescending(k => k.Score).Select(s => new { s.UserId, s.Score })
+                    .ExecuteAsync()).GroupBy(s=>s.UserId).Select(g=>g.OrderByDescending(s=>s.Score).Select(s=>s.Score).First()).ToList();
         var userOffset = scores.LastIndexOf(userScore.Score);
         Console.WriteLine($"User offset {scores.Count()} {string.Join(",", scores.Take(10))}");
 
