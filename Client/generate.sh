@@ -1,4 +1,4 @@
-VERSION=0.3.1
+VERSION=0.3.2
 PACKAGE_NAME=Coflnet.Leaderboard.Client
 
 rm -r out
@@ -18,3 +18,4 @@ sed -i '34i    <None Include="../../../../README.md" Pack="true" PackagePath="\"
 dotnet pack
 cp src/$PACKAGE_NAME/bin/Release/$PACKAGE_NAME.*.nupkg ..
 dotnet nuget push ../$PACKAGE_NAME.$VERSION.nupkg --api-key $NUGET_API_KEY --source "nuget.org" --skip-duplicate
+rm *.sln

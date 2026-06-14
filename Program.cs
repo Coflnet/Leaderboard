@@ -1,8 +1,12 @@
 using Coflnet.Core;
 using Coflnet.Leaderboard.Services;
+using Coflnet.Security.OpenBao;
 using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Add OpenBao configuration (must be called before AddCoflnetCore which builds the service provider)
+builder.Configuration.AddOpenBaoFromEnvironment();
 
 // Add services to the container.
 
