@@ -8,6 +8,10 @@ var builder = WebApplication.CreateBuilder(args);
 // Add OpenBao configuration (must be called before AddCoflnetCore which builds the service provider)
 builder.Configuration.AddOpenBaoFromEnvironment();
 
+// Shared OTel logging configuration from Coflnet.Core.
+// Bridges ILogger -> OTLP (HttpProtobuf) so logs land in Loki, correlated with traces in Jaeger.
+builder.Logging.AddOpenTelemetryLogging(builder.Configuration, builder.Configuration["OTEL_SERVICE_NAME"] ?? "leaderboard");
+
 // Add services to the container.
 
 builder.Services.AddControllers();
