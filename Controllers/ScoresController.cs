@@ -45,14 +45,14 @@ public class ScoresController : ControllerBase
         }
     }
     /// <summary>
-    /// Get the leaderboard for a specific slug
+    /// Get the leaderboard scores around a specific user
     /// </summary>
     /// <param name="leaderboardSlug"></param>
     /// <param name="userId"></param>
     /// <returns></returns>
     [Route("{leaderboardSlug}/user/{userId}")]
     [HttpGet]
-    public async Task<IEnumerable<BoardScore>> GetLeaderboard(string leaderboardSlug, string userId, int before = 10, int after = 10)
+    public async Task<IEnumerable<BoardScore>> GetLeaderboardAroundUser(string leaderboardSlug, string userId, int before = 10, int after = 10)
     {
         return await service.GetScoresAround(leaderboardSlug, userId, before, after);
     }
@@ -68,6 +68,19 @@ public class ScoresController : ControllerBase
     public async Task<long> GetOwnRank(string leaderboardSlug, string userId)
     {
         return await service.GetOwnRank(leaderboardSlug, userId);
+    }
+
+    /// <summary>
+    /// Delete all scores for a user on a specific leaderboard
+    /// </summary>
+    /// <param name="leaderboardSlug"></param>
+    /// <param name="userId"></param>
+    /// <returns></returns>
+    [Route("{leaderboardSlug}/user/{userId}")]
+    [HttpDelete]
+    public async Task<int> DeleteUserScores(string leaderboardSlug, string userId)
+    {
+        return await service.DeleteUserScores(leaderboardSlug, userId);
     }
 
     /// <summary>

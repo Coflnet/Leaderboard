@@ -138,6 +138,20 @@ public class LeaderboardService
         return userScore.BucketId * 1000 + userOffset + 1;
     }
 
+    public async Task<int> DeleteUserScores(string boardSlug, string userId)
+    {
+        var table = new Table<BoardScore>(session);
+        var userScores = (await table.Where(f => f.Slug == boardSlug && f.UserId == userId).ExecuteAsync()).ToList();
+        foreach (var item in userScores)
+        {
+            var deleteStatement = table.Where(f => f.Slug == boardSlug && f.BucketId == item.BucketId && f.Score == item.Score && f.UserId == userId).Delete();
+            deleteStatement.SetConsistencyLevel(ConsistencyLevel.Quorum);
+            await session.ExecuteAsync(deleteStatement);
+        }
+        logger.LogInformation($"Deleted {userScores.Count} scores for user {userId} on board {boardSlug}");
+        return userScores.Count;
+    }
+
     private async Task RezizeBucket(string boardSlug, ISession session, Table<BoardScore> table, long bucketId)
     {
         var bucketTable = new Table<Bucket>(session);
